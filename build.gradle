@@ -32,16 +32,23 @@ buildscript {
         commit_lib_patches = System.getProperty("build.lib.commit_patches", "true")
 
         version_tokens = opensearch_version.tokenize('-')
+        // Modules are versioned 3.0.0
+        opensearch_build_module = version_tokens[0]
+        // Plugins are versioned 3.0.0.0
         opensearch_build = version_tokens[0] + '.0'
         plugin_no_snapshot = opensearch_build
         if (version_qualifier) {
             opensearch_build += "-${version_qualifier}"
             plugin_no_snapshot += "-${version_qualifier}"
+            opensearch_build_module += "-${version_qualifier}"
         }
         if (isSnapshot) {
             opensearch_build += "-SNAPSHOT"
+            opensearch_build_module += "-SNAPSHOT"
         }
         opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
+        k_NN_resource_folder = "build/resource/repository-s3"
+        k_NN_build_download_url = "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/3.0.0/latest/linux/arm64/tar/builds/opensearch/core-plugins/repository-s3-3.0.0.zip"
     }
 
     // This isn't applying from repositories.gradle so repeating git diff it here
@@ -90,7 +97,7 @@ ext {
     projectSubstitutions = [:]
 
     configureSecurityPlugin = { OpenSearchCluster cluster ->
-        configurations.zipArchive.asFileTree.each {
+        configurations.secureIntegTestPluginArchive.asFileTree.each {
             cluster.plugin(provider(new Callable<RegularFile>() {
                 @Override
                 RegularFile call() throws Exception {
@@ -202,6 +209,7 @@ allprojects {
 
 configurations {
     zipArchive
+    secureIntegTestPluginArchive
 }
 
 publishing {
@@ -236,16 +244,6 @@ publishing {
             }
         }
     }
-}
-
-compileJava {
-    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
-}
-compileTestJava {
-    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
-}
-compileTestFixturesJava {
-    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 
 def usingRemoteCluster = System.properties.containsKey('tests.rest.cluster') || System.properties.containsKey('tests.cluster')
@@ -284,6 +282,7 @@ task release(type: Copy, group: 'build') {
     eachFile { it.path = it.path - "opensearch/" }
 }
 
+def s3JarDirectory = "$buildDir/dependencies/repository-s3"
 
 //****************************************************************************/
 // Dependencies
@@ -291,6 +290,7 @@ task release(type: Copy, group: 'build') {
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     compileOnly "org.opensearch.plugin:opensearch-scripting-painless-spi:${versions.opensearch}"
+    compileOnly "org.opensearch.plugin:repository-s3:${versions.opensearch}"
     api group: 'com.google.guava', name: 'failureaccess', version:'1.0.1'
     api group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     api group: 'commons-lang', name: 'commons-lang', version: '2.6'
@@ -310,7 +310,29 @@ dependencies {
     // OpenSearch core is using slf4j 1.7.36. Therefore, we cannot change the version here.
     implementation 'org.slf4j:slf4j-api:1.7.36'
 
-    zipArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
+    secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
+//    zipArchive group: 'org.opensearch.plugin', name:'repository-s3', version: "${opensearch_build_module}"
+//    compileOnly fileTree(dir: s3JarDirectory, include: "repository-s3-${opensearch_build_module}.jar")
+//    testFixturesCompileOnly fileTree(dir: s3JarDirectory, include: "repository-s3-${opensearch_build_module}.jar")
+}
+
+//task extractKnnJar(type:Copy) {
+//    mustRunAfter()
+//    from(zipTree(configurations.zipArchive.find { it.name.startsWith("repository-s3") }))
+//    into s3JarDirectory
+//}
+//
+//project.tasks.delombok.dependsOn(extractKnnJar)
+
+compileJava {
+//    dependsOn extractKnnJar
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+}
+compileTestJava {
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+}
+compileTestFixturesJava {
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 
 task windowsPatches(type:Exec) {
@@ -408,6 +430,26 @@ testClusters.integTest {
     if (System.getProperty("security.enabled") != null) {
         configureSecurityPlugin(testClusters.integTest)
     }
+
+    // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
+    plugin(provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
+                    if (new File("$project.rootDir/$k_NN_resource_folder").exists()) {
+                        project.delete(files("$project.rootDir/$k_NN_resource_folder"))
+                    }
+                    project.mkdir k_NN_resource_folder
+                    ant.get(src: k_NN_build_download_url,
+                            dest: k_NN_resource_folder,
+                            httpusecaches: false)
+                    return fileTree(k_NN_resource_folder).getSingleFile()
+                }
+            }
+        }
+    }))
 
     plugin(project.tasks.bundlePlugin.archiveFile)
     if (Os.isFamily(Os.FAMILY_WINDOWS)) {
