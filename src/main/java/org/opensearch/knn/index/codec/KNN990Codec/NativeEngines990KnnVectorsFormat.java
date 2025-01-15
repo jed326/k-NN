@@ -20,8 +20,10 @@ import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.opensearch.knn.index.KNNSettings;
+import org.opensearch.knn.index.remote.RemoteIndexBuilder;
 
 import java.io.IOException;
+import java.util.Optional;
 
 /**
  * This is a Vector format that will be used for Native engines like Faiss and Nmslib for reading and writing vector
@@ -32,23 +34,29 @@ public class NativeEngines990KnnVectorsFormat extends KnnVectorsFormat {
     private static FlatVectorsFormat flatVectorsFormat;
     private static final String FORMAT_NAME = "NativeEngines990KnnVectorsFormat";
     private static int approximateThreshold;
+    private final Optional<RemoteIndexBuilder> remoteIndexBuilder;
 
     public NativeEngines990KnnVectorsFormat() {
         this(new Lucene99FlatVectorsFormat(new DefaultFlatVectorScorer()));
     }
 
     public NativeEngines990KnnVectorsFormat(int approximateThreshold) {
-        this(new Lucene99FlatVectorsFormat(new DefaultFlatVectorScorer()), approximateThreshold);
+        this(new Lucene99FlatVectorsFormat(new DefaultFlatVectorScorer()), approximateThreshold, Optional.empty());
     }
 
     public NativeEngines990KnnVectorsFormat(final FlatVectorsFormat flatVectorsFormat) {
-        this(flatVectorsFormat, KNNSettings.INDEX_KNN_ADVANCED_APPROXIMATE_THRESHOLD_DEFAULT_VALUE);
+        this(flatVectorsFormat, KNNSettings.INDEX_KNN_ADVANCED_APPROXIMATE_THRESHOLD_DEFAULT_VALUE, Optional.empty());
     }
 
-    public NativeEngines990KnnVectorsFormat(final FlatVectorsFormat flatVectorsFormat, int approximateThreshold) {
+    public NativeEngines990KnnVectorsFormat(
+        final FlatVectorsFormat flatVectorsFormat,
+        int approximateThreshold,
+        Optional<RemoteIndexBuilder> remoteIndexBuilder
+    ) {
         super(FORMAT_NAME);
         NativeEngines990KnnVectorsFormat.flatVectorsFormat = flatVectorsFormat;
         NativeEngines990KnnVectorsFormat.approximateThreshold = approximateThreshold;
+        this.remoteIndexBuilder = remoteIndexBuilder;
     }
 
     /**
@@ -58,7 +66,7 @@ public class NativeEngines990KnnVectorsFormat extends KnnVectorsFormat {
      */
     @Override
     public KnnVectorsWriter fieldsWriter(final SegmentWriteState state) throws IOException {
-        return new NativeEngines990KnnVectorsWriter(state, flatVectorsFormat.fieldsWriter(state), approximateThreshold);
+        return new NativeEngines990KnnVectorsWriter(state, flatVectorsFormat.fieldsWriter(state), approximateThreshold, remoteIndexBuilder);
     }
 
     /**
