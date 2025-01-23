@@ -20,7 +20,6 @@ import java.util.Optional;
  */
 public class KNN9120PerFieldKnnVectorsFormat extends BasePerFieldKnnVectorsFormat {
     private static final int NUM_MERGE_WORKERS = 1;
-    private RemoteIndexBuilder remoteIndexBuilder;
 
     public KNN9120PerFieldKnnVectorsFormat(
         final Optional<MapperService> mapperService,

@@ -47,8 +47,8 @@ buildscript {
             opensearch_build_module += "-SNAPSHOT"
         }
         opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
-        k_NN_resource_folder = "build/resource/repository-s3"
-        k_NN_build_download_url = "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/3.0.0/latest/linux/arm64/tar/builds/opensearch/core-plugins/repository-s3-3.0.0.zip"
+        repo_s3_resource_folder = "build/resource/repository-s3"
+        repo_s3_download_url = "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/3.0.0/latest/linux/arm64/tar/builds/opensearch/core-plugins/repository-s3-3.0.0.zip"
     }
 
     // This isn't applying from repositories.gradle so repeating git diff it here
@@ -311,18 +311,7 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:1.7.36'
 
     secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
-//    zipArchive group: 'org.opensearch.plugin', name:'repository-s3', version: "${opensearch_build_module}"
-//    compileOnly fileTree(dir: s3JarDirectory, include: "repository-s3-${opensearch_build_module}.jar")
-//    testFixturesCompileOnly fileTree(dir: s3JarDirectory, include: "repository-s3-${opensearch_build_module}.jar")
 }
-
-//task extractKnnJar(type:Copy) {
-//    mustRunAfter()
-//    from(zipTree(configurations.zipArchive.find { it.name.startsWith("repository-s3") }))
-//    into s3JarDirectory
-//}
-//
-//project.tasks.delombok.dependsOn(extractKnnJar)
 
 compileJava {
 //    dependsOn extractKnnJar
@@ -438,14 +427,14 @@ testClusters.integTest {
             return new RegularFile() {
                 @Override
                 File getAsFile() {
-                    if (new File("$project.rootDir/$k_NN_resource_folder").exists()) {
-                        project.delete(files("$project.rootDir/$k_NN_resource_folder"))
+                    if (new File("$project.rootDir/$repo_s3_resource_folder").exists()) {
+                        project.delete(files("$project.rootDir/$repo_s3_resource_folder"))
                     }
-                    project.mkdir k_NN_resource_folder
-                    ant.get(src: k_NN_build_download_url,
-                            dest: k_NN_resource_folder,
+                    project.mkdir repo_s3_resource_folder
+                    ant.get(src: repo_s3_download_url,
+                            dest: repo_s3_resource_folder,
                             httpusecaches: false)
-                    return fileTree(k_NN_resource_folder).getSingleFile()
+                    return fileTree(repo_s3_resource_folder).getSingleFile()
                 }
             }
         }

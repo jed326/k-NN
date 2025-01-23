@@ -15,6 +15,7 @@ import org.opensearch.index.mapper.MapperService;
 import org.opensearch.knn.KNNTestCase;
 
 import org.apache.logging.log4j.Logger;
+import org.opensearch.knn.index.remote.RemoteIndexBuilder;
 
 import java.util.UUID;
 
@@ -46,7 +47,7 @@ public class KNNCodecServiceTests extends KNNTestCase {
         MapperService mapperService = mock(MapperService.class);
         Logger loggerMock = mock(Logger.class);
         CodecServiceConfig codecServiceConfig = new CodecServiceConfig(indexSettings, mapperService, loggerMock);
-        KNNCodecService knnCodecService = new KNNCodecService(codecServiceConfig);
+        KNNCodecService knnCodecService = new KNNCodecService(codecServiceConfig, mock(RemoteIndexBuilder.class));
         Codec codec = knnCodecService.codec(KNNCodecVersion.current().getCodecName());
         assertNotNull(codec);
     }
@@ -61,7 +62,7 @@ public class KNNCodecServiceTests extends KNNTestCase {
     public void testGetCodecByNameWithNoMapperService() {
         Logger loggerMock = mock(Logger.class);
         CodecServiceConfig codecServiceConfig = new CodecServiceConfig(indexSettings, null, loggerMock);
-        KNNCodecService knnCodecService = new KNNCodecService(codecServiceConfig);
+        KNNCodecService knnCodecService = new KNNCodecService(codecServiceConfig, mock(RemoteIndexBuilder.class));
         Codec codec = knnCodecService.codec(KNNCodecVersion.current().getCodecName());
         assertNotNull(codec);
     }

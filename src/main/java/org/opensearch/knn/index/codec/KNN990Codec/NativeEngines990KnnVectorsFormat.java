@@ -19,11 +19,11 @@ import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
+import org.opensearch.common.Nullable;
 import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.remote.RemoteIndexBuilder;
 
 import java.io.IOException;
-import java.util.Optional;
 
 /**
  * This is a Vector format that will be used for Native engines like Faiss and Nmslib for reading and writing vector
@@ -34,24 +34,28 @@ public class NativeEngines990KnnVectorsFormat extends KnnVectorsFormat {
     private static FlatVectorsFormat flatVectorsFormat;
     private static final String FORMAT_NAME = "NativeEngines990KnnVectorsFormat";
     private static int approximateThreshold;
-    private final Optional<RemoteIndexBuilder> remoteIndexBuilder;
+    @Nullable
+    private final RemoteIndexBuilder remoteIndexBuilder;
 
+    // For Testing Only
     public NativeEngines990KnnVectorsFormat() {
         this(new Lucene99FlatVectorsFormat(new DefaultFlatVectorScorer()));
     }
 
+    // For Testing Only
     public NativeEngines990KnnVectorsFormat(int approximateThreshold) {
-        this(new Lucene99FlatVectorsFormat(new DefaultFlatVectorScorer()), approximateThreshold, Optional.empty());
+        this(new Lucene99FlatVectorsFormat(new DefaultFlatVectorScorer()), approximateThreshold, null);
     }
 
+    // For Testing Only
     public NativeEngines990KnnVectorsFormat(final FlatVectorsFormat flatVectorsFormat) {
-        this(flatVectorsFormat, KNNSettings.INDEX_KNN_ADVANCED_APPROXIMATE_THRESHOLD_DEFAULT_VALUE, Optional.empty());
+        this(flatVectorsFormat, KNNSettings.INDEX_KNN_ADVANCED_APPROXIMATE_THRESHOLD_DEFAULT_VALUE, null);
     }
 
     public NativeEngines990KnnVectorsFormat(
         final FlatVectorsFormat flatVectorsFormat,
         int approximateThreshold,
-        Optional<RemoteIndexBuilder> remoteIndexBuilder
+        RemoteIndexBuilder remoteIndexBuilder
     ) {
         super(FORMAT_NAME);
         NativeEngines990KnnVectorsFormat.flatVectorsFormat = flatVectorsFormat;

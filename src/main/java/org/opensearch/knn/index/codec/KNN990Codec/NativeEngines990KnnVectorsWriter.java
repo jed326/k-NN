@@ -33,13 +33,10 @@ import org.opensearch.knn.index.vectorvalues.KNNVectorValues;
 import org.opensearch.knn.plugin.stats.KNNGraphValue;
 import org.opensearch.knn.quantization.models.quantizationParams.QuantizationParams;
 import org.opensearch.knn.quantization.models.quantizationState.QuantizationState;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 import static org.opensearch.knn.common.FieldInfoExtractor.extractVectorDataType;
@@ -58,13 +55,13 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
     private final List<NativeEngineFieldVectorsWriter<?>> fields = new ArrayList<>();
     private boolean finished;
     private final Integer approximateThreshold;
-    private final Optional<RemoteIndexBuilder> remoteIndexBuilder;
+    private final RemoteIndexBuilder remoteIndexBuilder;
 
     public NativeEngines990KnnVectorsWriter(
         SegmentWriteState segmentWriteState,
         FlatVectorsWriter flatVectorsWriter,
         Integer approximateThreshold,
-        Optional<RemoteIndexBuilder> remoteIndexBuilder
+        RemoteIndexBuilder remoteIndexBuilder
     ) {
         this.segmentWriteState = segmentWriteState;
         this.flatVectorsWriter = flatVectorsWriter;
@@ -72,12 +69,13 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
         this.remoteIndexBuilder = remoteIndexBuilder;
     }
 
+    // For Testing Only
     public NativeEngines990KnnVectorsWriter(
         SegmentWriteState segmentWriteState,
         FlatVectorsWriter flatVectorsWriter,
         Integer buildGraphAlwaysThreshold
     ) {
-        this(segmentWriteState, flatVectorsWriter, buildGraphAlwaysThreshold, Optional.empty());
+        this(segmentWriteState, flatVectorsWriter, buildGraphAlwaysThreshold, null);
     }
 
     /**
@@ -130,20 +128,6 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
                 );
                 continue;
             }
-
-            log.info("WRITE TO REPO");
-            // Write arbitrary test data to repo
-            if (remoteIndexBuilder.isPresent()) {
-                RemoteIndexBuilder remoteIndexBuilderInstance = remoteIndexBuilder.get();
-                BlobStoreRepository repo = remoteIndexBuilderInstance.getRepository();
-                String test = "Test";
-                repo.blobStore()
-                    .blobContainer(repo.basePath().add(RemoteIndexBuilder.VECTOR_PATH))
-                    .writeBlob("testblob", new ByteArrayInputStream(test.getBytes()), test.getBytes().length, false);
-            } else {
-                log.error("Remote Index Builder Not Set");
-            }
-
             final NativeIndexWriter writer = NativeIndexWriter.getWriter(fieldInfo, segmentWriteState, quantizationState);
             final KNNVectorValues<?> knnVectorValues = knnVectorValuesSupplier.get();
 
@@ -152,6 +136,9 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
             long time_in_millis = stopWatch.stop().totalTime().millis();
             KNNGraphValue.REFRESH_TOTAL_TIME_IN_MILLIS.incrementBy(time_in_millis);
             log.debug("Flush took {} ms for vector field [{}]", time_in_millis, fieldInfo.getName());
+
+            log.info("[FLUSH] BUILD INDEX REMOTELY");
+            remoteIndexBuilder.buildIndexRemotely(fieldInfo, knnVectorValuesSupplier, totalLiveDocs, segmentWriteState);
         }
     }
 
@@ -183,19 +170,6 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
                 approximateThreshold
             );
             return;
-        }
-
-        log.info("WRITE TO REPO");
-        // Write arbitrary test data to repo
-        if (remoteIndexBuilder.isPresent()) {
-            RemoteIndexBuilder remoteIndexBuilderInstance = remoteIndexBuilder.get();
-            BlobStoreRepository repo = remoteIndexBuilderInstance.getRepository();
-            String test = "Test";
-            repo.blobStore()
-                .blobContainer(repo.basePath().add(RemoteIndexBuilder.VECTOR_PATH))
-                .writeBlob("testblob", new ByteArrayInputStream(test.getBytes()), test.getBytes().length, true);
-        } else {
-            log.error("Remote Index Builder Not Set");
         }
 
         final NativeIndexWriter writer = NativeIndexWriter.getWriter(fieldInfo, segmentWriteState, quantizationState);
@@ -330,11 +304,9 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
     }
 
     private boolean shouldSkipBuildingVectorDataStructure(final long docCount) {
-        // Force build for testing
-        return false;
-        // if (approximateThreshold < 0) {
-        // return true;
-        // }
-        // return docCount < approximateThreshold;
+        if (approximateThreshold < 0) {
+            return true;
+        }
+        return docCount < approximateThreshold;
     }
 }
