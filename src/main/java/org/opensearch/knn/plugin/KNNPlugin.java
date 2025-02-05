@@ -14,6 +14,7 @@ import org.opensearch.index.engine.EngineFactory;
 import org.opensearch.indices.SystemIndexDescriptor;
 import org.opensearch.knn.index.KNNCircuitBreaker;
 import org.opensearch.knn.index.memory.NativeMemoryCacheManager;
+import org.opensearch.knn.index.remote.RemoteIndexBuilder;
 import org.opensearch.knn.plugin.search.KNNConcurrentSearchRequestDecider;
 import org.opensearch.knn.index.util.KNNClusterUtil;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
@@ -163,6 +164,7 @@ public class KNNPlugin extends Plugin
 
     private KNNStats knnStats;
     private ClusterService clusterService;
+    private RemoteIndexBuilder remoteIndexBuilder;
 
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
@@ -192,6 +194,8 @@ public class KNNPlugin extends Plugin
         Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
         this.clusterService = clusterService;
+        // If featureflag enabled
+        this.remoteIndexBuilder = new RemoteIndexBuilder(repositoriesServiceSupplier);
 
         // Initialize Native Memory loading strategies
         VectorReader vectorReader = new VectorReader(client);
@@ -284,7 +288,7 @@ public class KNNPlugin extends Plugin
     @Override
     public Optional<CodecServiceFactory> getCustomCodecServiceFactory(IndexSettings indexSettings) {
         if (indexSettings.getValue(KNNSettings.IS_KNN_INDEX_SETTING)) {
-            return Optional.of(KNNCodecService::new);
+            return Optional.of((config) -> new KNNCodecService(config, remoteIndexBuilder));
         }
         return Optional.empty();
     }

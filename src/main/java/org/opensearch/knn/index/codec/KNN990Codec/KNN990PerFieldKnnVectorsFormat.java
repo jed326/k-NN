@@ -37,7 +37,8 @@ public class KNN990PerFieldKnnVectorsFormat extends BasePerFieldKnnVectorsFormat
                 knnScalarQuantizedVectorsFormatParams.isCompressFlag(),
                 knnScalarQuantizedVectorsFormatParams.getConfidenceInterval(),
                 null
-            )
+            ),
+            Optional.empty()
         );
     }
 

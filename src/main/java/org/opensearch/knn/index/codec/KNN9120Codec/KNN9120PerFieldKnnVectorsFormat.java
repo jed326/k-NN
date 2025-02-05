@@ -11,6 +11,7 @@ import org.opensearch.index.mapper.MapperService;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.knn.index.codec.BasePerFieldKnnVectorsFormat;
 import org.opensearch.knn.index.engine.KNNEngine;
+import org.opensearch.knn.index.remote.RemoteIndexBuilder;
 
 import java.util.Optional;
 
@@ -20,7 +21,10 @@ import java.util.Optional;
 public class KNN9120PerFieldKnnVectorsFormat extends BasePerFieldKnnVectorsFormat {
     private static final int NUM_MERGE_WORKERS = 1;
 
-    public KNN9120PerFieldKnnVectorsFormat(final Optional<MapperService> mapperService) {
+    public KNN9120PerFieldKnnVectorsFormat(
+        final Optional<MapperService> mapperService,
+        final Optional<RemoteIndexBuilder> remoteIndexBuilder
+    ) {
         super(
             mapperService,
             Lucene99HnswVectorsFormat.DEFAULT_MAX_CONN,
@@ -46,7 +50,8 @@ public class KNN9120PerFieldKnnVectorsFormat extends BasePerFieldKnnVectorsForma
                 knnScalarQuantizedVectorsFormatParams.isCompressFlag(),
                 knnScalarQuantizedVectorsFormatParams.getConfidenceInterval(),
                 null
-            )
+            ),
+            remoteIndexBuilder
         );
     }
 

@@ -28,6 +28,7 @@ import org.opensearch.common.StopWatch;
 import org.opensearch.knn.index.VectorDataType;
 import org.opensearch.knn.index.codec.nativeindex.NativeIndexWriter;
 import org.opensearch.knn.index.quantizationservice.QuantizationService;
+import org.opensearch.knn.index.remote.RemoteIndexBuilder;
 import org.opensearch.knn.index.vectorvalues.KNNVectorValues;
 import org.opensearch.knn.plugin.stats.KNNGraphValue;
 import org.opensearch.knn.quantization.models.quantizationParams.QuantizationParams;
@@ -54,15 +55,27 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
     private final List<NativeEngineFieldVectorsWriter<?>> fields = new ArrayList<>();
     private boolean finished;
     private final Integer approximateThreshold;
+    private final RemoteIndexBuilder remoteIndexBuilder;
 
     public NativeEngines990KnnVectorsWriter(
         SegmentWriteState segmentWriteState,
         FlatVectorsWriter flatVectorsWriter,
-        Integer approximateThreshold
+        Integer approximateThreshold,
+        RemoteIndexBuilder remoteIndexBuilder
     ) {
         this.segmentWriteState = segmentWriteState;
         this.flatVectorsWriter = flatVectorsWriter;
         this.approximateThreshold = approximateThreshold;
+        this.remoteIndexBuilder = remoteIndexBuilder;
+    }
+
+    // For Testing Only
+    public NativeEngines990KnnVectorsWriter(
+        SegmentWriteState segmentWriteState,
+        FlatVectorsWriter flatVectorsWriter,
+        Integer buildGraphAlwaysThreshold
+    ) {
+        this(segmentWriteState, flatVectorsWriter, buildGraphAlwaysThreshold, null);
     }
 
     /**
@@ -115,6 +128,10 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
                 );
                 continue;
             }
+
+            // log.info("[FLUSH] BUILD INDEX REMOTELY");
+            // remoteIndexBuilder.buildIndexRemotely(fieldInfo, knnVectorValuesSupplier, totalLiveDocs, segmentWriteState);
+
             final NativeIndexWriter writer = NativeIndexWriter.getWriter(fieldInfo, segmentWriteState, quantizationState);
             final KNNVectorValues<?> knnVectorValues = knnVectorValuesSupplier.get();
 
@@ -155,6 +172,10 @@ public class NativeEngines990KnnVectorsWriter extends KnnVectorsWriter {
             );
             return;
         }
+
+        log.info("[MERGE] BUILD INDEX REMOTELY");
+        remoteIndexBuilder.buildIndexRemotely(fieldInfo, knnVectorValuesSupplier, totalLiveDocs, segmentWriteState);
+
         final NativeIndexWriter writer = NativeIndexWriter.getWriter(fieldInfo, segmentWriteState, quantizationState);
         final KNNVectorValues<?> knnVectorValues = knnVectorValuesSupplier.get();
 
