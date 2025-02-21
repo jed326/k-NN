@@ -178,6 +178,7 @@ public class KNNRestTestCase extends ODFERestTestCase {
         if (randomBoolean() && isRemoteIndexBuildSupported(getBWCVersion())) {
             updateClusterSettings(KNNFeatureFlags.KNN_REMOTE_VECTOR_BUILD_SETTING.getKey(), true);
             updateClusterSettings(KNNSettings.KNN_REMOTE_VECTOR_REPO, "integ-test-repo");
+            updateClusterSettings(KNNSettings.KNN_REMOTE_VECTOR_BUILD_THRESHOLD, "0mb");
         }
     }
 
