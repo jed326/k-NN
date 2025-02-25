@@ -5,16 +5,21 @@
 
 package org.opensearch.knn.index.codec.nativeindex.remote;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.lucene.index.SegmentWriteState;
 import org.opensearch.common.StopWatch;
 import org.opensearch.common.annotation.ExperimentalApi;
+import org.opensearch.common.blobstore.BlobContainer;
+import org.opensearch.common.blobstore.BlobPath;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.knn.common.featureflags.KNNFeatureFlags;
 import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.codec.nativeindex.NativeIndexBuildStrategy;
 import org.opensearch.knn.index.codec.nativeindex.model.BuildIndexParams;
+import org.opensearch.knn.index.engine.KNNEngine;
+import org.opensearch.knn.index.store.IndexOutputWithBuffer;
 import org.opensearch.knn.index.vectorvalues.KNNVectorValues;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.repositories.Repository;
@@ -22,6 +27,9 @@ import org.opensearch.repositories.RepositoryMissingException;
 import org.opensearch.repositories.blobstore.BlobStoreRepository;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.function.Supplier;
 
 import static org.opensearch.knn.index.KNNSettings.KNN_INDEX_REMOTE_VECTOR_BUILD_SETTING;
@@ -37,6 +45,7 @@ public class RemoteIndexBuildStrategy implements NativeIndexBuildStrategy {
 
     private final Supplier<RepositoriesService> repositoriesServiceSupplier;
     private final NativeIndexBuildStrategy fallbackStrategy;
+
     private static final String VECTOR_BLOB_FILE_EXTENSION = ".knnvec";
     private static final String DOC_ID_FILE_EXTENSION = ".knndid";
 
@@ -93,12 +102,12 @@ public class RemoteIndexBuildStrategy implements NativeIndexBuildStrategy {
             log.debug("Submit vector build took {} ms for vector field [{}]", time_in_millis, indexInfo.getFieldName());
 
             stopWatch = new StopWatch().start();
-            awaitVectorBuild();
+            String downloadPath = awaitVectorBuild();
             time_in_millis = stopWatch.stop().totalTime().millis();
             log.debug("Await vector build took {} ms for vector field [{}]", time_in_millis, indexInfo.getFieldName());
 
             stopWatch = new StopWatch().start();
-            readFromRepository();
+            readFromRepository(downloadPath, indexInfo.getIndexOutputWithBuffer());
             time_in_millis = stopWatch.stop().totalTime().millis();
             log.debug("Repository read took {} ms for vector field [{}]", time_in_millis, indexInfo.getFieldName());
         } catch (Exception e) {
@@ -155,15 +164,38 @@ public class RemoteIndexBuildStrategy implements NativeIndexBuildStrategy {
 
     /**
      * Wait on remote vector build to complete
+     * @return String     The path from which we should perform download, delimited by "/"
      */
-    private void awaitVectorBuild() {
+    private String awaitVectorBuild() throws NotImplementedException {
         throw new NotImplementedException();
     }
 
     /**
      * Read constructed vector file from remote repository and write to IndexOutput
      */
-    private void readFromRepository() {
-        throw new NotImplementedException();
+    @VisibleForTesting
+    void readFromRepository(String path, IndexOutputWithBuffer indexOutputWithBuffer) throws IOException {
+        if (path == null || path.isEmpty()) {
+            throw new IllegalArgumentException("download path is null or empty");
+        }
+        Path downloadPath = Paths.get(path);
+        String fileName = downloadPath.getFileName().toString();
+        if (!fileName.endsWith(KNNEngine.FAISS.getExtension())) {
+            log.error("download path [{}] does not end with extension [{}}", downloadPath, KNNEngine.FAISS.getExtension());
+            throw new IllegalArgumentException("download path has incorrect file extension");
+        }
+
+        BlobPath blobContainerPath = new BlobPath();
+        if (downloadPath.getParent() != null) {
+            for (Path p : downloadPath.getParent()) {
+                blobContainerPath = blobContainerPath.add(p.getFileName().toString());
+            }
+        }
+
+        BlobContainer blobContainer = getRepository().blobStore().blobContainer(blobContainerPath);
+        // TODO: We are using the sequential download API as multi-part parallel download is difficult for us to implement today and
+        // requires some changes in core. For more details, see: https://github.com/opensearch-project/k-NN/issues/2464
+        InputStream graphStream = blobContainer.readBlob(fileName);
+        indexOutputWithBuffer.writeFromStreamWithBuffer(graphStream);
     }
 }
