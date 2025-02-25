@@ -12,6 +12,8 @@ import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.Version;
 import org.junit.Before;
@@ -42,11 +44,13 @@ import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.repositories.RepositoryMissingException;
 import org.opensearch.repositories.blobstore.BlobStoreRepository;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -207,5 +211,57 @@ public class RemoteIndexBuildStrategyTests extends KNNTestCase {
         assertTrue(upload.get());
         verify(mockBlobStore).blobContainer(any());
         verify(mockRepository).basePath();
+    }
+
+    /**
+     * Verify the buffered read method in {@link RemoteIndexBuildStrategy#readFromRepository} produces the correct result
+     */
+    public void testRepositoryRead() throws IOException {
+        // Create an InputStream with random values
+        int TEST_ARRAY_SIZE = 64 * 1024 * 10;
+        byte[] byteArray = new byte[TEST_ARRAY_SIZE];
+        Random random = new Random();
+        random.nextBytes(byteArray);
+        InputStream randomStream = new ByteArrayInputStream(byteArray);
+
+        // Create a test segment that we will read/write from
+        Directory directory;
+        directory = newFSDirectory(createTempDir());
+        String TEST_SEGMENT_NAME = "test-segment-name";
+        IndexOutput testIndexOutput = directory.createOutput(TEST_SEGMENT_NAME, IOContext.DEFAULT);
+        IndexOutputWithBuffer testIndexOutputWithBuffer = new IndexOutputWithBuffer(testIndexOutput);
+
+        // Set up RemoteIndexBuildStrategy and write to IndexOutput
+        RepositoriesService repositoriesService = mock(RepositoriesService.class);
+        BlobStoreRepository mockRepository = mock(BlobStoreRepository.class);
+        BlobPath testBasePath = new BlobPath().add("testBasePath");
+        BlobStore mockBlobStore = mock(BlobStore.class);
+        AsyncMultiStreamBlobContainer mockBlobContainer = mock(AsyncMultiStreamBlobContainer.class);
+
+        when(repositoriesService.repository(any())).thenReturn(mockRepository);
+        when(mockRepository.basePath()).thenReturn(testBasePath);
+        when(mockRepository.blobStore()).thenReturn(mockBlobStore);
+        when(mockBlobStore.blobContainer(any())).thenReturn(mockBlobContainer);
+        when(mockBlobContainer.readBlob("testFile")).thenReturn(randomStream);
+
+        RemoteIndexBuildStrategy objectUnderTest = new RemoteIndexBuildStrategy(
+            () -> repositoriesService,
+            mock(NativeIndexBuildStrategy.class),
+            mock(IndexSettings.class)
+        );
+        // This should read from randomStream into testIndexOutput
+        BlobPath testPath = new BlobPath().add("testBasePath").add("testDirectory").add("testFile");
+        objectUnderTest.readFromRepository(testPath, testIndexOutputWithBuffer);
+        testIndexOutput.close();
+
+        // Now try to read from the IndexOutput
+        IndexInput testIndexInput = directory.openInput(TEST_SEGMENT_NAME, IOContext.DEFAULT);
+        byte[] resultByteArray = new byte[TEST_ARRAY_SIZE];
+        testIndexInput.readBytes(resultByteArray, 0, TEST_ARRAY_SIZE);
+        assertArrayEquals(byteArray, resultByteArray);
+
+        // Test Cleanup
+        testIndexInput.close();
+        directory.close();
     }
 }

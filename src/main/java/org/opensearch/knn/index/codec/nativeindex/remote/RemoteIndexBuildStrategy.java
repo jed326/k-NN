@@ -5,6 +5,7 @@
 
 package org.opensearch.knn.index.codec.nativeindex.remote;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.NotImplementedException;
 import org.opensearch.action.LatchedActionListener;
@@ -25,6 +26,7 @@ import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.VectorDataType;
 import org.opensearch.knn.index.codec.nativeindex.NativeIndexBuildStrategy;
 import org.opensearch.knn.index.codec.nativeindex.model.BuildIndexParams;
+import org.opensearch.knn.index.store.IndexOutputWithBuffer;
 import org.opensearch.knn.index.vectorvalues.KNNVectorValues;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.repositories.Repository;
@@ -138,12 +140,12 @@ public class RemoteIndexBuildStrategy implements NativeIndexBuildStrategy {
             log.debug("Submit vector build took {} ms for vector field [{}]", time_in_millis, indexInfo.getFieldName());
 
             stopWatch = new StopWatch().start();
-            awaitVectorBuild();
+            BlobPath downloadPath = awaitVectorBuild();
             time_in_millis = stopWatch.stop().totalTime().millis();
             log.debug("Await vector build took {} ms for vector field [{}]", time_in_millis, indexInfo.getFieldName());
 
             stopWatch = new StopWatch().start();
-            readFromRepository();
+            readFromRepository(downloadPath, indexInfo.getIndexOutputWithBuffer());
             time_in_millis = stopWatch.stop().totalTime().millis();
             log.debug("Repository read took {} ms for vector field [{}]", time_in_millis, indexInfo.getFieldName());
         } catch (Exception e) {
@@ -335,15 +337,22 @@ public class RemoteIndexBuildStrategy implements NativeIndexBuildStrategy {
 
     /**
      * Wait on remote vector build to complete
+     * @return BlobPath     The path from which we should perform download
      */
-    private void awaitVectorBuild() {
+    private BlobPath awaitVectorBuild() throws NotImplementedException {
         throw new NotImplementedException();
     }
 
     /**
      * Read constructed vector file from remote repository and write to IndexOutput
      */
-    private void readFromRepository() {
-        throw new NotImplementedException();
+    @VisibleForTesting
+    void readFromRepository(BlobPath downloadPath, IndexOutputWithBuffer indexOutputWithBuffer) throws IOException {
+        BlobContainer blobContainer = getRepository().blobStore().blobContainer(downloadPath.parent());
+        // TODO: We are using the sequential download API as multi-part parallel download is difficult for us to implement today and
+        // requires some changes in core. For more details, see: https://github.com/opensearch-project/k-NN/issues/2464
+        String fileName = downloadPath.toArray()[downloadPath.toArray().length - 1];
+        InputStream graphStream = blobContainer.readBlob(fileName);
+        indexOutputWithBuffer.writeFromStreamWithBuffer(graphStream);
     }
 }
